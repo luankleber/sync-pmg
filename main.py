@@ -94,3 +94,17 @@ async def pull(token: str = Query(...)):
     caminho_arquivo = os.path.join(pasta_tecnico, arquivo_mais_recente)
 
     return FileResponse(path=caminho_arquivo, filename=arquivo_mais_recente, media_type='application/vnd.ms-excel')
+
+@app.get("/list")
+async def listar_arquivos(token: str = Query(...)):
+    if not validar_token(token):
+        raise HTTPException(status_code=403, detail="Token inválido")
+
+    pasta_tecnico = os.path.join(UPLOAD_FOLDER, token)
+
+    if not os.path.exists(pasta_tecnico):
+        return {"arquivos": []}
+
+    arquivos = os.listdir(pasta_tecnico)
+    return {"arquivos": arquivos}
+
