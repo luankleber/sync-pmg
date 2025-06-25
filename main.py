@@ -72,3 +72,25 @@ async def delete_file(filename: str = Query(...), token: str = Query(...)):
 
     os.remove(caminho_arquivo)
     return {"status": "ok", "message": f"Arquivo {filename} removido"}
+
+from fastapi.responses import FileResponse
+
+@app.get("/pull")
+async def pull(token: str = Query(...)):
+    if not validar_token(token):
+        raise HTTPException(status_code=403, detail="Token inválido")
+
+    pasta_tecnico = os.path.join(UPLOAD_FOLDER, token)
+    if not os.path.exists(pasta_tecnico):
+        raise HTTPException(status_code=404, detail="Nenhum arquivo encontrado")
+
+    arquivos = [f for f in os.listdir(pasta_tecnico) if os.path.isfile(os.path.join(pasta_tecnico, f))]
+    if not arquivos:
+        raise HTTPException(status_code=404, detail="Nenhum arquivo encontrado")
+
+    # Seleciona o arquivo mais recente
+    arquivos.sort(key=lambda f: os.path.getmtime(os.path.join(pasta_tecnico, f)), reverse=True)
+    arquivo_mais_recente = arquivos[0]
+    caminho_arquivo = os.path.join(pasta_tecnico, arquivo_mais_recente)
+
+    return FileResponse(path=caminho_arquivo, filename=arquivo_mais_recente, media_type='application/vnd.ms-excel')
