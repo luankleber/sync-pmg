@@ -1,26 +1,26 @@
 import os
-import time
 import json
+import time
 from fastapi import FastAPI, UploadFile, File, Query, HTTPException
 from apscheduler.schedulers.background import BackgroundScheduler
+from fastapi.responses import FileResponse
 
 app = FastAPI()
-
 UPLOAD_FOLDER = "uploads"
 
-# Exemplo simples de tokens válidos
-# Você pode carregar de um arquivo JSON ou banco depois
-TOKENS_VALIDOS = {
-    "luan": "4f2b1fc2-3e5d-44c0-b126-fadadf870b65",
-    "joao": "e8894ef1-0d12-4fd5-91cb-2d8c857fa272"
-}
+# Carrega JSON com usuários e license keys da variável de ambiente
+USERS_JSON = os.getenv("USERS_JSON", "{}")
+try:
+    USERS = json.loads(USERS_JSON)
+except json.JSONDecodeError:
+    USERS = {}
 
-def validar_token(token: str):
-    return token in TOKENS_VALIDOS.values()
+def validar_licenca(usuario: str, license_key: str):
+    return USERS.get(usuario) == license_key
 
 def limpar_arquivos_antigos(dias_para_manter=7):
     agora = time.time()
-    limite = dias_para_manter * 24 * 3600  # segundos
+    limite = dias_para_manter * 24 * 3600
     print("Executando limpeza de arquivos antigos...")
 
     for root, dirs, files in os.walk(UPLOAD_FOLDER):
@@ -34,7 +34,6 @@ def limpar_arquivos_antigos(dias_para_manter=7):
                 except Exception as e:
                     print(f"Erro ao remover {caminho}: {e}")
 
-# Scheduler para rodar limpeza todo dia
 scheduler = BackgroundScheduler()
 scheduler.add_job(limpar_arquivos_antigos, 'interval', hours=24)
 scheduler.start()
@@ -44,11 +43,15 @@ def shutdown_event():
     scheduler.shutdown()
 
 @app.post("/upload")
-async def upload(file: UploadFile = File(...), token: str = Query(...)):
-    if not validar_token(token):
-        raise HTTPException(status_code=403, detail="Token inválido")
+async def upload(
+    usuario: str = Query(...),
+    license_key: str = Query(...),
+    file: UploadFile = File(...)
+):
+    if not validar_licenca(usuario, license_key):
+        raise HTTPException(status_code=403, detail="Usuário ou License Key inválidos")
 
-    pasta_tecnico = os.path.join(UPLOAD_FOLDER, token)
+    pasta_tecnico = os.path.join(UPLOAD_FOLDER, usuario)
     os.makedirs(pasta_tecnico, exist_ok=True)
 
     caminho_arquivo = os.path.join(pasta_tecnico, file.filename)
@@ -60,11 +63,15 @@ async def upload(file: UploadFile = File(...), token: str = Query(...)):
     return {"status": "ok", "filename": file.filename}
 
 @app.delete("/delete")
-async def delete_file(filename: str = Query(...), token: str = Query(...)):
-    if not validar_token(token):
-        raise HTTPException(status_code=403, detail="Token inválido")
+async def delete_file(
+    filename: str = Query(...),
+    usuario: str = Query(...),
+    license_key: str = Query(...)
+):
+    if not validar_licenca(usuario, license_key):
+        raise HTTPException(status_code=403, detail="Usuário ou License Key inválidos")
 
-    pasta_tecnico = os.path.join(UPLOAD_FOLDER, token)
+    pasta_tecnico = os.path.join(UPLOAD_FOLDER, usuario)
     caminho_arquivo = os.path.join(pasta_tecnico, filename)
 
     if not os.path.exists(caminho_arquivo):
@@ -73,14 +80,15 @@ async def delete_file(filename: str = Query(...), token: str = Query(...)):
     os.remove(caminho_arquivo)
     return {"status": "ok", "message": f"Arquivo {filename} removido"}
 
-from fastapi.responses import FileResponse
-
 @app.get("/pull")
-async def pull(token: str = Query(...)):
-    if not validar_token(token):
-        raise HTTPException(status_code=403, detail="Token inválido")
+async def pull(
+    usuario: str = Query(...),
+    license_key: str = Query(...)
+):
+    if not validar_licenca(usuario, license_key):
+        raise HTTPException(status_code=403, detail="Usuário ou License Key inválidos")
 
-    pasta_tecnico = os.path.join(UPLOAD_FOLDER, token)
+    pasta_tecnico = os.path.join(UPLOAD_FOLDER, usuario)
     if not os.path.exists(pasta_tecnico):
         raise HTTPException(status_code=404, detail="Nenhum arquivo encontrado")
 
@@ -88,7 +96,6 @@ async def pull(token: str = Query(...)):
     if not arquivos:
         raise HTTPException(status_code=404, detail="Nenhum arquivo encontrado")
 
-    # Seleciona o arquivo mais recente
     arquivos.sort(key=lambda f: os.path.getmtime(os.path.join(pasta_tecnico, f)), reverse=True)
     arquivo_mais_recente = arquivos[0]
     caminho_arquivo = os.path.join(pasta_tecnico, arquivo_mais_recente)
@@ -96,15 +103,17 @@ async def pull(token: str = Query(...)):
     return FileResponse(path=caminho_arquivo, filename=arquivo_mais_recente, media_type='application/vnd.ms-excel')
 
 @app.get("/list")
-async def listar_arquivos(token: str = Query(...)):
-    if not validar_token(token):
-        raise HTTPException(status_code=403, detail="Token inválido")
+async def listar_arquivos(
+    usuario: str = Query(...),
+    license_key: str = Query(...)
+):
+    if not validar_licenca(usuario, license_key):
+        raise HTTPException(status_code=403, detail="Usuário ou License Key inválidos")
 
-    pasta_tecnico = os.path.join(UPLOAD_FOLDER, token)
+    pasta_tecnico = os.path.join(UPLOAD_FOLDER, usuario)
 
     if not os.path.exists(pasta_tecnico):
         return {"arquivos": []}
 
     arquivos = os.listdir(pasta_tecnico)
     return {"arquivos": arquivos}
-
