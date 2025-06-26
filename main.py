@@ -116,3 +116,10 @@ async def delete_file(filename: str = Query(...), usuario: str = Query(...), lic
 
     os.remove(caminho_arquivo)
     return {"status": "ok", "message": f"Arquivo {filename} removido"}
+
+@app.get("/validate")
+async def validate(usuario: str = Query(...), license_key: str = Query(...)):
+    if not validar_token(usuario, license_key):
+        raise HTTPException(status_code=403, detail="Credenciais inválidas")
+    return {"status": "ok", "message": "Credenciais válidas"}
+
