@@ -1,11 +1,15 @@
 import os
 import time
 import json
+import pytz
 from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, Query, HTTPException, Body
 from fastapi.responses import FileResponse
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi.middleware.cors import CORSMiddleware  
+
+fuso_brasil = pytz.timezone("America/Sao_Paulo")
+agora = datetime.now(fuso_brasil)
 
 app = FastAPI()
 
@@ -86,8 +90,13 @@ async def upload_json(usuario: str = Query(...), license_key: str = Query(...), 
     pasta_tecnico = os.path.join(UPLOAD_FOLDER, license_key)
     os.makedirs(pasta_tecnico, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    nome_arquivo = f"{usuario}_{timestamp}.json"
+    serial_number = data.get("serial_number", "unknown")
+    safe_serial = serial_number.replace(" ", "_").replace("/", "_")
+
+    timestamp = agora.strftime("%Y%m%d_%H%M%S")
+
+    nome_arquivo = f"{usuario}_{safe_serial}_{timestamp}.json"
+
     caminho = os.path.join(pasta_tecnico, nome_arquivo)
 
     with open(caminho, "w", encoding="utf-8") as f:
